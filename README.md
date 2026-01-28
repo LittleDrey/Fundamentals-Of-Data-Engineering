@@ -32,9 +32,10 @@ staging_zone/ (Volume Databricks)
 ├── futebol_db/          <-- Sistema de Origem (Source System)
 │   ├── torneios/        <-- Entidade de Negócio
 │   │   ├── csv/         <-- Formato do Arquivo
-│   │       └── YYYY_MM_DD_torneios.csv
+│   │       └── _torneios.csv
 │   ├── jogadores/
 │   │   ├── json/
-│   │       └── ...
+│   │       └── _jogadores.json
 │   └── partidas/
-│       └── ...
+│   │    ├── csv/
+│   │       └── _partidas.csv
