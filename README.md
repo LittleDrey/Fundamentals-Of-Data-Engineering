@@ -7,7 +7,7 @@ Consolidando Conceitos e Fundamentos do Livro 'Fundamentals-Of-Data-Engineering'
 > Um projeto de Engenharia de Dados End-to-End aplicando os conceitos fundamentais do livro *"Fundamentals of Data Engineering"* (Joe Reis & Matt Housley).
 
 ## 🎯 Objetivo do Projeto
-Construir um pipeline de dados robusto, escalável e moderno para processar dados de futebol (jogadores, partidas, torneios), traduzindo a teoria de engenharia de dados em prática real utilizando **Databricks** e **Delta Lake**.
+Construir um pipeline de dados robusto, escalável e moderno para processar dados de futebol (jogadores, partidas, torneios, ...), traduzindo a teoria de engenharia de dados em prática real utilizando **Databricks** e **Delta Lake**.
 
 O projeto segue a arquitetura **Medallion** (Bronze, Silver, Gold), com foco em qualidade de dados, governança e otimização de armazenamento.
 
