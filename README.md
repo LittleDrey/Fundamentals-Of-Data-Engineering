@@ -39,3 +39,36 @@ staging_zone/ (Volume Databricks)
 │   └── partidas/
 │   │    ├── csv/
 │   │       └── _partidas.csv
+
+---
+
+## 🚧 Desafios de Engenharia e Soluções (War Stories)
+
+Durante a fase de Ingestão, enfrentei limitações de infraestrutura e problemas de qualidade de dados na origem. Abaixo documentei como superar cada barreira, alinhando com os fundamentos do livro.
+
+### 1. Restrição de Infraestrutura: Streaming em Cluster Compartilhado
+* **O Problema:** A intenção original era utilizar o **Databricks Auto Loader** (`cloud_files`) em modo Streaming para garantir checkpoints automáticos. Porém, o ambiente utilizado (Databricks Community Edition/Free Edition) opera em **Shared Clusters**, que bloqueiam permissões de baixo nível necessárias para a gestão de filas de arquivos do Auto Loader.
+* **Erro Encontrado:** `[UNSUPPORTED_STREAMING_SOURCE_PERMISSION_ENFORCED]`
+* **A Solução (Trade-off):** A arquitetura foi adaptada para **Batch Read**, mantendo o código modular. Aceitei a perda temporária do checkpoint automático em favor da execução funcional, entendendo que em um ambiente Enterprise (Single User Cluster), a chave `use_stream=True` reativaria a capacidade de streaming sem refatoração de código.
+
+### 2. Serialização e Encoding (UTF-16)
+* **O Problema:** A ingestão inicial dos arquivos CSV resultou em dados corrompidos ("Mojibake") e falha na identificação de colunas (todas lidas como `_c0`), pois o Spark assume `UTF-8` por padrão.
+* **A Solução:** Foi implementado um tratamento específico no Reader do Spark para forçar o encoding correto detectado na origem (`UTF-16`), além da definição explícita de delimitadores e cabeçalhos.
+
+### 3. Integridade do Schema (JSON Aninhado)
+* **O Problema:** Arquivo JSON (Jogadores) e CSV (Eventos) continham estruturas complexas aninhadas e colunas com strings que representavam objetos JSON.
+* **Decisão Arquitetural:** Seguindo o princípio da camada **Bronze** (preservar o dado bruto), optei por não "explodir" ou limpar esses JSONs na ingestão. Eles foram persistidos como Strings ou Structs brutos para serem tratados na camada Silver, garantindo que falhas de parser não interrompam o pipeline de ingestão.
+
+---
+
+## 🔮 Roadmap para Camada Silver (Transformação)
+
+Com base no *Profiling* dos dados da camada Bronze, mapeei as seguintes necessidades de tratamento para a próxima fase:
+
+| Tabela | Problema Identificado (Bronze) | Ação Planejada (Silver) |
+| :--- | :--- | :--- |
+| **Jogadores** | Coluna `height` contém caracteres sujos (ex: `> 200 cm`). | Limpeza de strings (Regex) e Cast para `Integer`. |
+| **Jogadores** | Dados aninhados em estruturas JSON. | Parser e `Flatten` das colunas. |
+| **Eventos** | Colunas `team`, `player`, `assist` são strings JSON (`{'id': 10...}`). | Uso de `from_json` para estruturar IDs e Nomes. |
+| **Partidas** | Colunas de data sem padrão definido. | Padronização para `DateType` ou `Timestamp`. |
+| **Geral** | Nomes de colunas fora do padrão (ex: CamelCase ou com pontos `league.season`). | Renomeação para `snake_case` (ex: `league_season`). |
