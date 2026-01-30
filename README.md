@@ -39,7 +39,7 @@ staging_zone/ (Volume Databricks)
 │   └── partidas/
 │   │    ├── csv/
 │   │       └── _partidas.csv
-
+```
 ---
 
 ## 🚧 Desafios de Engenharia e Soluções (War Stories)
