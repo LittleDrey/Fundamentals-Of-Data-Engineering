@@ -72,3 +72,71 @@ Com base no *Profiling* dos dados da camada Bronze, mapeei as seguintes necessid
 | **Eventos** | Colunas `team`, `player`, `assist` são strings JSON (`{'id': 10...}`). | Uso de `from_json` para estruturar IDs e Nomes. |
 | **Partidas** | Colunas de data sem padrão definido. | Padronização para `DateType` ou `Timestamp`. |
 | **Geral** | Nomes de colunas fora do padrão (ex: CamelCase ou com pontos `league.season`). | Renomeação para `snake_case` (ex: `league_season`). |
+
+---
+
+## 🏗️ Fase 2: Transformação Raw (Bronze) -> Silver
+
+Esta fase focou na **limpeza, padronização e estruturação** dos dados brutos. O objetivo foi transformar dados "caóticos" (Raw) em tabelas confiáveis, tipadas e otimizadas para análise (Silver), aplicando conceitos de *Schema Enforcement* e *Data Quality*.
+
+### ⚔️ War Stories: Desafios Técnicos & Soluções
+
+Durante a construção do pipeline, enfrentei inconsistências críticas nos dados de origem. Abaixo, detalho os cenários de "crise" e as soluções de engenharia aplicadas.
+
+#### 1. O Desafio do "Encoding Híbrido" (Mojibake)
+**O Problema:** A ingestão da tabela `partidas` falhou silenciosamente. Dados históricos (2011-2019) foram gerados em **UTF-16LE** (padrão Excel legado), enquanto dados recentes (2023) chegaram em **UTF-8**.
+* **Sintoma:** Ao forçar uma leitura única, o Spark interpretou bytes UTF-8 como UTF-16, gerando caracteres chineses (ex: `㄰〵...`) na coluna de IDs. Isso é conhecido tecnicamente como *Mojibake*.
+* **Impacto:** Corrupção total dos IDs e falha na tipagem (Integers viraram Strings).
+
+**A Solução (Smart Ingestion Pattern):**
+Desenvolvi uma função "Sniffer" (Farejadora) que inspeciona os primeiros bytes (Magic Bytes) de cada arquivo antes da leitura total.
+* **Lógica:** Se o arquivo inicia com `\xff\xfe` (BOM), o pipeline aplica decoder UTF-16. Caso contrário, assume UTF-8.
+* **Resultado:** Ingestão híbrida bem-sucedida, unificando arquivos com encodings diferentes no mesmo DataFrame via `unionByName`.
+
+#### 2. Schema Drift & Conflito no Delta Lake
+**O Problema:** Devido à ingestão corrompida anterior, o Delta Lake registrou a coluna `id` como `STRING` nos metadados. Ao corrigir o encoding, os dados chegaram corretamente como `INTEGER`.
+* **Erro:** `[DELTA_FAILED_TO_MERGE_FIELDS] Failed to merge fields 'id' and 'id'.`
+* **Conceito:** O Delta Lake protege a integridade do schema (Schema Enforcement), impedindo mudanças bruscas de tipo.
+
+**A Solução:**
+Implementação de uma estratégia de **Schema Evolution Controlada** na camada Bronze:
+1.  Uso da opção `.option("overwriteSchema", "true")` para forçar a atualização dos metadados.
+2.  Execução preventiva de `DROP TABLE` para limpar logs de transação contaminados em ambiente de desenvolvimento.
+
+#### 3. Data Wrangling em "Fake JSONs" (Tabela Eventos)
+**O Problema:** A tabela de eventos continha colunas (`player`, `team`, `time`, `assist`) que pareciam JSON, mas eram representações de dicionários Python (aspas simples `'` e `None` em vez de `null`). O parser nativo do Spark falhava.
+* **A Solução:** Pipeline de higienização via Regex antes do parsing.
+    * Substituição de aspas simples por duplas.
+    * Tratamento de literais `None` para `null`.
+    * Aplicação de `from_json` com Schema explícito (DDL) para garantir tipagem forte.
+ 
+#### 4. Tratamento de JSONs Verdadeiros "Struct" (Tabela Jogadores)
+**O Problema:** A tabela de jogadores continha uma coluna (`birth`) apresentada como JSON, utilizando aspas duplas `"` e `Null`. E dados incosistentes nas colunas `height` e `weight`.
+* **A Solução:** Parser nativo do Spark juntamente com remoção de caracteres não numéricos.
+  *  Regex Cleanning e Flattening.
+
+#### 5. Regras de Negócio e Correção de Domínio
+Para garantir a qualidade analítica na camada Silver, aplicamos regras de negócio corretivas:
+* **Futebol Domain Check:** Na tabela `eventos`, detectamos minutos negativos (ex: `-5`). Aplicamos função `abs()` (valor absoluto) assumindo erro de digitação na origem.
+* **Entity Resolution:** Na tabela `times`, times brasileiros estavam marcados incorretamente como `national = False`. Aplicamos regra condicional: `WHEN country = 'Brazil' THEN is_national = True`.
+* **Tratamento de Strings Numéricas:** A coluna `score.fulltime.away` continha números formatados como string com ponto flutuante ("2.0"). Aplicamos cast (String -> Int) ou regex para limpeza.
+
+---
+
+### 🛠️ Decisões de Arquitetura (Design Patterns)
+
+1.  **Schema Contract (.select vs .withColumn):**
+    * Adotamos o uso estrito de `.select()` na transição para Silver.
+    * *Por que?* Isso funciona como um "Contrato de Dados". Apenas colunas explicitamente listadas e tipadas entram na Silver. Colunas "lixo" ou temporárias da Bronze são descartadas automaticamente, garantindo uma tabela limpa.
+
+2.  **Chaves Substitutas (Surrogate Keys):**
+    * Geramos chaves internas (`sk`) usando `monotonically_increasing_id()`.
+    * *Motivo:* Desacoplar o Data Lake dos IDs do sistema de origem, protegendo contra duplicidade ou mudanças de chaves no legado.
+
+3.  **Linhagem de Dados (Data Lineage):**
+    * Todas as tabelas Silver mantêm as colunas `source_file` e `ingestion_date`.
+    * *Benefício:* Rastreabilidade total. Se um dado estiver errado no Dashboard, sabemos exatamente qual arquivo CSV/JSON originou o erro e quando foi processado.
+
+4.  **FinOps & Otimização:**
+    * Conversão de tipos `BigInt` (padrão Spark) para `Integer` onde o domínio de dados permite, reduzindo o tamanho do armazenamento e custo de I/O.
+    * Armazenamento em formato **Delta Lake** (Parquet comprimido com Snappy) para leitura colunar otimizada.
