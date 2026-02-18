@@ -117,9 +117,9 @@ Implementação de uma estratégia de **Schema Evolution Controlada** na camada 
 
 #### 5. Regras de Negócio e Correção de Domínio
 Para garantir a qualidade analítica na camada Silver, aplicamos regras de negócio corretivas:
-* **Futebol Domain Check:** Na tabela `eventos`, detectamos minutos negativos (ex: `-5`). Aplicamos função `abs()` (valor absoluto) assumindo erro de digitação na origem.
-* **Entity Resolution:** Na tabela `times`, times brasileiros estavam marcados incorretamente como `national = False`. Aplicamos regra condicional: `WHEN country = 'Brazil' THEN is_national = True`.
-* **Tratamento de Strings Numéricas:** A coluna `score.fulltime.away` continha números formatados como string com ponto flutuante ("2.0"). Aplicamos cast (String -> Int) ou regex para limpeza.
+* **Futebol Domain Check:** Na tabela `eventos`, detectei minutos negativos (ex: `-5`). Apliquei a função `abs()` (valor absoluto) assumindo erro de digitação na origem.
+* **Entity Resolution:** Na tabela `times`, times brasileiros estavam marcados incorretamente como `national = False`. Apliquei regra condicional: `WHEN country = 'Brazil' THEN is_national = True`.
+* **Tratamento de Strings Numéricas:** A coluna `score.fulltime.away` continha números formatados como string com ponto flutuante ("2.0"). Apliquei cast (String -> Int) ou regex para limpeza.
 
 ---
 
