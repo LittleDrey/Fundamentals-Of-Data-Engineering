@@ -140,3 +140,26 @@ Para garantir a qualidade analítica na camada Silver, aplicamos regras de negó
 4.  **FinOps & Otimização:**
     * Conversão de tipos `BigInt` (padrão Spark) para `Integer` onde o domínio de dados permite, reduzindo o tamanho do armazenamento e custo de I/O.
     * Armazenamento em formato **Delta Lake** (Parquet comprimido com Snappy) para leitura colunar otimizada.
+    * 
+
+---
+
+    ### ⚙️ Architecture Decision Record (ADR): Estratégia de Particionamento Físico
+
+**Contexto:**
+Durante o design da camada Silver e Gold, avaliei a necessidade de particionar fisicamente as tabelas do Data Lake (ex: `PARTITION BY season_year` ou `match_date`), uma prática comum para acelerar a leitura de dados via *Partition Pruning*.
+
+**Decisão:**
+Optei por **NÃO PARTICIONAR** fisicamente as tabelas deste projeto (Times, Jogadores, Partidas, Eventos, Torneios e Estádios).
+
+**Justificativa Técnica (O Problema dos Pequenos Arquivos):**
+Em Engenharia de Dados, o particionamento é recomendado exclusivamente para tabelas massivas onde cada partição física resulte em diretórios com, no mínimo, **1 GB a 2 GB de dados**. 
+O dataset do domínio de Futebol é de baixa volumetria (megabytes por temporada). Se fosse aplicado o particionamento por ano:
+1. Seria criado micro-arquivos (alguns KBs) para cada temporada.
+2. Geraria um *Metadata Overhead* massivo: o Apache Spark gastaria muito mais tempo e processamento listando diretórios recursivamente do que efetivamente lendo os dados.
+3. Degradaria a performance de leitura global (Small Files Problem).
+
+**Estratégia Adotada (Modern Data Stack):**
+Para garantir a otimização das consultas analíticas na camada Gold sem incorrer no erro de *over-partitioning*, utilizarei os recursos nativos de indexação do Delta Lake.
+* Execução diária do comando `OPTIMIZE` para consolidar os dados em arquivos Parquet de tamanho ideal.
+* Aplicação de `ZORDER BY (match_id, match_season_year)` nas tabelas de Fato (`partidas` e `eventos`) para co-localizar dados relacionados fisicamente, permitindo *Data Skipping* dinâmico em consultas de BI sem a necessidade de pastas físicas.
