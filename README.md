@@ -144,7 +144,7 @@ Para garantir a qualidade analítica na camada Silver, aplicamos regras de negó
 
 ---
 
-    ### ⚙️ Architecture Decision Record (ADR): Estratégia de Particionamento Físico
+### ⚙️ Architecture Decision Record (ADR): Estratégia de Particionamento Físico
 
 **Contexto:**
 Durante o design da camada Silver e Gold, avaliei a necessidade de particionar fisicamente as tabelas do Data Lake (ex: `PARTITION BY season_year` ou `match_date`), uma prática comum para acelerar a leitura de dados via *Partition Pruning*.
