@@ -49,7 +49,9 @@ Tabela transacional (Fato) de altíssima granularidade. Registra cada ocorrênci
 ---
 
 ### 3. Tabela: `jogadores` (Players)
-Dimensão contendo o perfil biológico e demográfico dos atletas.
+Dimensão contendo o perfil biológico e demográfico dos atletas. Modelada sob o padrão **SCD Tipo 1** (Slowly Changing Dimension Type 1), onde o registro mais recente sobrescreve o antigo, garantindo a unicidade absoluta da chave de negócio (`player_id`).
+
+*(A tabela de colunas permanece a mesma)*
 
 | Coluna | Tipo | Descrição |
 | :--- | :--- | :--- |
@@ -117,17 +119,19 @@ Dimensão contendo os dados dos clubes de futebol.
 ---
 
 ### 6. Tabela: `torneios` (Leagues)
-Dimensão que cataloga as edições dos campeonatos.
+Dimensão que cataloga as edições dos campeonatos. Diferente das demais dimensões, esta atua conceitualmente como uma tabela de histórico (**SCD Tipo 2** ou *Factless Fact Table*), onde a unicidade da entidade não é definida apenas pelo ID do torneio, mas sim pela **Chave Composta** (`tournament_id` + `season_year`).
 
 | Coluna | Tipo | Descrição |
 | :--- | :--- | :--- |
-| `tournament_sk` | Integer | Chave substituta interna do Data Lake para torneios. |
-| `tornament_id` | Integer | ID do torneio na fonte. |
+| `tournament_sk` | Integer | Chave substituta interna do Data Lake para torneios. Única por linha. |
+| `tournament_id` | Integer | ID do torneio na fonte original. (Faz parte da PK Composta). |
 | `tournament_name` | String | Nome da liga/copa (ex: "Serie A"). |
 | `country_name` | String | País sede do torneio. |
-| `season_year` | Integer | Ano de realização da edição. |
+| `season_year` | Integer | Ano de realização da edição. (Faz parte da PK Composta). |
 | `season_start` | Date | Data de abertura do torneio. |
 | `season_end` | Date | Data de encerramento do torneio. |
 | `is_current_season`| Boolean | Flag indicando se é a temporada que está ocorrendo atualmente. |
+| `source_file` | String | Caminho do arquivo de origem (Linhagem de Dados). |
+| `ingestion_date` | Timestamp | Data e hora exata da ingestão no fuso America/Sao_Paulo. | que está ocorrendo atualmente. |
 | `source_file` | String | Caminho do arquivo de origem (Linhagem de Dados). |
 | `ingestion_date` | Timestamp | Data e hora exata da ingestão no fuso America/Sao_Paulo. |
