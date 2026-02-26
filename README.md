@@ -121,6 +121,16 @@ Para garantir a qualidade analítica na camada Silver, aplicamos regras de negó
 * **Entity Resolution:** Na tabela `times`, times brasileiros estavam marcados incorretamente como `national = False`. Apliquei regra condicional: `WHEN country = 'Brazil' THEN is_national = True`.
 * **Tratamento de Strings Numéricas:** A coluna `score.fulltime.away` continha números formatados como string com ponto flutuante ("2.0"). Apliquei cast (String -> Int) ou regex para limpeza.
 
+#### 6. Observabilidade e o Falso Positivo (Databricks Lakehouse Monitoring)
+**O Problema:** A implementação do monitoramento de qualidade estatística via Databricks Unity Catalog apontou ausência de duplicatas em tabelas que, ao serem consultadas via PySpark, possuíam chaves primárias duplicadas.
+* **A Causa:** Desalinhamento entre a "Verdade do Log" e a "Verdade do Momento". O Monitoramento operava como um Job agendado (foto do passado), enquanto o cluster consultava o estado atual corrompido por novas cargas.
+* **A Solução:** Separação estrita de schemas. Foi criado o schema *Sidecar* `workspace_project.data_governance` exclusivo para isolar as tabelas de métricas (`_profile_metrics` e `_drift_metrics`), garantindo que ferramentas de BI não realizem scans acidentais em metadados. Monitores foram ajustados: *Snapshot* para tabelas estáticas (Dimensões) e *Time Series* para eventos (Fatos).
+
+#### 7. O Paradigma da Deduplicação: Window Function vs dropDuplicates
+**O Problema:** Identificação de linhas duplicadas na tabela `jogadores` e `torneios` na camada Silver, gerando distorção analítica. O uso do método nativo `dropDuplicates()` do Spark traria não-determinismo (risco de manter a versão desatualizada de um dado).
+* **A Solução (Jogadores - SCD Type 1):** Implementação de uma função modular utilizando `Window Function` (ordenando por `ingestion_date` DESC) para garantir a extração do *Golden Record* (registro mais recente). Após a limpeza em memória, os dados são persistidos no Delta Lake utilizando a instrução transacional `MERGE INTO` (Upsert), garantindo atualização de registros existentes e inserção de novos.
+* **A Solução (Torneios - Chave Composta):** Prevenção de perda de dados históricos (SCD Tipo 2). A função de deduplicação foi parametrizada para atuar sobre uma Chave Primária Composta (`tournament_id` + `season_year`), preservando o histórico de todas as temporadas de um mesmo campeonato.
+
 ---
 
 ### 🛠️ Decisões de Arquitetura (Design Patterns)
@@ -140,7 +150,10 @@ Para garantir a qualidade analítica na camada Silver, aplicamos regras de negó
 4.  **FinOps & Otimização:**
     * Conversão de tipos `BigInt` (padrão Spark) para `Integer` onde o domínio de dados permite, reduzindo o tamanho do armazenamento e custo de I/O.
     * Armazenamento em formato **Delta Lake** (Parquet comprimido com Snappy) para leitura colunar otimizada.
-    * 
+
+5.  **Data Quality Constraints (Fail-Fast):**
+    * Aplicamos restrições físicas no banco de dados através do Unity Catalog (ex: `ALTER TABLE ... ADD CONSTRAINT pk_jogadores PRIMARY KEY (player_id)`).
+    * *Benefício:* Mudança de uma governança reativa (apagar duplicatas no código) para uma governança ativa (o banco de dados rejeita transações que ferem a integridade relacional, economizando processamento e evitando falhas silenciosas).    
 
 ---
 
